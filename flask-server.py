@@ -1,8 +1,7 @@
-from flask import Flask, request, render_template_string, jsonify, redirect, url_for
+from flask import Flask, request, render_template_string, jsonify
 from datetime import datetime
 from flask_cors import CORS
 import os
-import uuid
 
 app = Flask(__name__)
 CORS(app)
@@ -13,8 +12,6 @@ messages = []
 # Shared variable to hold the custom response option
 response_option = "Default response: Your message has been successfully processed."
 
-# Temporary store for pending responses
-pending_requests = {}
 
 def caesar_decrypt(encrypted_text, shift=3):
     """
@@ -31,16 +28,105 @@ def caesar_decrypt(encrypted_text, shift=3):
     decrypted_text = ""
     for char in encrypted_text:
         if char.isalpha():
+            # Handle letters (a-z, A-Z)
             ascii_base = ord('A') if char.isupper() else ord('a')
             shifted = (ord(char) - ascii_base - shift) % 26
             decrypted_text += chr(shifted + ascii_base)
         elif char.isdigit():
+            # Handle numbers (0-9)
+            # Convert to 0-9 range, apply shift, wrap around 10 positions
             num = int(char)
             shifted = (num - shift) % 10
             decrypted_text += str(shifted)
         else:
+            # Keep other characters unchanged
             decrypted_text += char
     return decrypted_text
+
+
+# Updated HTML template with decrypted messages
+HTML_TEMPLATE = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Encrypted Messages</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f0f2f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1a73e8;
+            text-align: center;
+        }
+        .message {
+            padding: 10px;
+            margin: 10px 0;
+            background-color: #f8f9fa;
+            border-left: 4px solid #1a73e8;
+            border-radius: 4px;
+        }
+        .encrypted, .decrypted {
+            margin: 5px 0;
+        }
+        .label {
+            font-weight: bold;
+            color: #1a73e8;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 0.8em;
+        }
+        .refresh-button {
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        .refresh-button:hover {
+            background-color: #1557b0;
+        }
+    </style>
+    <script>
+        function refreshPage() {
+            location.reload();
+        }
+        
+        // Auto-refresh every 10 seconds
+        setInterval(refreshPage, 10000);
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Encrypted Messages</h1>
+        <button class="refresh-button" onclick="refreshPage()">Refresh Messages</button>
+        {% for message in messages %}
+        <div class="message">
+            <div class="encrypted">
+                <span class="label">Encrypted:</span> {{ message['encrypted_text'] }}
+            </div>
+            <div class="decrypted">
+                <span class="label">Decrypted:</span> {{ message['decrypted_text'] }}
+            </div>
+            <div class="timestamp">Received: {{ message['timestamp'] }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</body>
+</html>
+'''
 
 
 @app.route('/')
@@ -54,28 +140,6 @@ def set_response():
     if request.method == 'POST':
         # Update the response option dynamically
         response_option = request.form.get('new_response', response_option)
-        pending_id = request.form.get('pending_id')
-        
-        if pending_id and pending_id in pending_requests:
-            pending_request = pending_requests.pop(pending_id)
-            encrypted_message = pending_request['encrypted_message']
-            decrypted_message = pending_request['decrypted_message']
-            
-            # Store the processed message
-            messages.append({
-                'encrypted_text': encrypted_message,
-                'decrypted_text': decrypted_message,
-                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            })
-            
-            # Respond to the original client
-            return pending_request['callback']({
-                'status': 'success',
-                'message': 'Data received',
-                'decrypted_text': decrypted_message,
-                'response_option': response_option
-            })
-        
         return render_template_string('''
             <p>Response option updated successfully!</p>
             <a href="/set_response">Go back</a>
@@ -91,14 +155,13 @@ def set_response():
         <body>
             <h1>Set Custom Response Option</h1>
             <form method="POST">
-                <input type="hidden" name="pending_id" value="{{ pending_id }}">
                 <label for="new_response">Enter new response option:</label>
                 <input type="text" id="new_response" name="new_response" placeholder="Type your custom response here">
                 <button type="submit">Update Response</button>
             </form>
         </body>
         </html>
-    ''', pending_id=request.args.get('pending_id'))
+    ''')
 
 
 @app.route('/send_data', methods=['POST'])
@@ -112,31 +175,34 @@ def receive_data():
             # Decrypt the message
             decrypted_message = caesar_decrypt(encrypted_message)
             
-            # Generate a unique ID for this request
-            pending_id = str(uuid.uuid4())
+            messages.append({
+                'encrypted_text': encrypted_message,
+                'decrypted_text': decrypted_message,
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            })
             
-            # Save the pending request
-            pending_requests[pending_id] = {
-                'encrypted_message': encrypted_message,
-                'decrypted_message': decrypted_message,
-                'callback': lambda response: jsonify(response)
-            }
-            
-            # Redirect to set response page with the pending ID
-            return redirect(url_for('set_response', pending_id=pending_id))
-        
+            # Keep only last 10 messages
+            while len(messages) > 10:
+                messages.pop(0)
+                
+            return jsonify({
+                'status': 'success',
+                'message': 'Data received',
+                'decrypted_text': decrypted_message,
+                'response_option': response_option  # Use the updated response option
+            }), 200
         else:
             return jsonify({
                 'status': 'error',
                 'message': 'No message provided',
-                'response_option': response_option
+                'response_option': response_option  # Use the updated response option
             }), 400
             
     except Exception as e:
         return jsonify({
             'status': 'error',
             'message': str(e),
-            'response_option': response_option
+            'response_option': response_option  # Use the updated response option
         }), 400
 
 
