@@ -1,6 +1,6 @@
 from flask import Flask, request, render_template_string, jsonify
 from datetime import datetime
-from flask_cors import CORS  # Import CORS
+from flask_cors import CORS
 import os
 
 app = Flask(__name__)
@@ -9,7 +9,22 @@ CORS(app)
 # Store messages in memory (could be replaced with a database)
 messages = []
 
-# HTML template with some basic styling
+def caesar_decrypt(encrypted_text, shift=-3):
+    """Decrypt text using Caesar cipher with specified shift"""
+    decrypted_text = ""
+    for char in encrypted_text:
+        if char.isalpha():
+            # Determine the case and base ASCII value
+            ascii_base = ord('A') if char.isupper() else ord('a')
+            # Apply shift and wrap around alphabet
+            shifted = (ord(char) - ascii_base - shift) % 26
+            decrypted_text += chr(shifted + ascii_base)
+        else:
+            # Keep non-alphabetic characters unchanged
+            decrypted_text += char
+    return decrypted_text
+
+# Updated HTML template with decrypted messages
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html>
@@ -39,6 +54,13 @@ HTML_TEMPLATE = '''
             background-color: #f8f9fa;
             border-left: 4px solid #1a73e8;
             border-radius: 4px;
+        }
+        .encrypted, .decrypted {
+            margin: 5px 0;
+        }
+        .label {
+            font-weight: bold;
+            color: #1a73e8;
         }
         .timestamp {
             color: #666;
@@ -72,7 +94,12 @@ HTML_TEMPLATE = '''
         <button class="refresh-button" onclick="refreshPage()">Refresh Messages</button>
         {% for message in messages %}
         <div class="message">
-            <div>{{ message['text'] }}</div>
+            <div class="encrypted">
+                <span class="label">Encrypted:</span> {{ message['encrypted_text'] }}
+            </div>
+            <div class="decrypted">
+                <span class="label">Decrypted:</span> {{ message['decrypted_text'] }}
+            </div>
             <div class="timestamp">Received: {{ message['timestamp'] }}</div>
         </div>
         {% endfor %}
@@ -92,8 +119,12 @@ def receive_data():
         encrypted_message = data.get('encrypted_message')
         
         if encrypted_message:
+            # Decrypt the message
+            decrypted_message = caesar_decrypt(encrypted_message)
+            
             messages.append({
-                'text': encrypted_message,
+                'encrypted_text': encrypted_message,
+                'decrypted_text': decrypted_message,
                 'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             })
             
@@ -101,7 +132,11 @@ def receive_data():
             while len(messages) > 10:
                 messages.pop(0)
                 
-            return jsonify({'status': 'success', 'message': 'Data received'}), 200
+            return jsonify({
+                'status': 'success',
+                'message': 'Data received',
+                'decrypted_text': decrypted_message
+            }), 200
         else:
             return jsonify({'status': 'error', 'message': 'No message provided'}), 400
             
