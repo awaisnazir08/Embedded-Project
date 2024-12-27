@@ -9,7 +9,7 @@ CORS(app)
 # Store messages in memory (could be replaced with a database)
 messages = []
 
-def caesar_decrypt(encrypted_text, shift=-3):
+def caesar_decrypt(encrypted_text, shift=3):
     """Decrypt text using Caesar cipher with specified shift"""
     decrypted_text = ""
     for char in encrypted_text:
