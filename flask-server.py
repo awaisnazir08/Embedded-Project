@@ -10,19 +10,35 @@ CORS(app)
 messages = []
 
 def caesar_decrypt(encrypted_text, shift=3):
-    """Decrypt text using Caesar cipher with specified shift"""
+    """
+    Decrypt text using Caesar cipher with specified shift.
+    Handles both letters (a-z, A-Z) and numbers (0-9).
+    
+    Args:
+        encrypted_text (str): Text to decrypt
+        shift (int): Number of positions to shift back (default 3)
+    
+    Returns:
+        str: Decrypted text
+    """
     decrypted_text = ""
     for char in encrypted_text:
         if char.isalpha():
-            # Determine the case and base ASCII value
+            # Handle letters (a-z, A-Z)
             ascii_base = ord('A') if char.isupper() else ord('a')
-            # Apply shift and wrap around alphabet
             shifted = (ord(char) - ascii_base - shift) % 26
             decrypted_text += chr(shifted + ascii_base)
+        elif char.isdigit():
+            # Handle numbers (0-9)
+            # Convert to 0-9 range, apply shift, wrap around 10 positions
+            num = int(char)
+            shifted = (num - shift) % 10
+            decrypted_text += str(shifted)
         else:
-            # Keep non-alphabetic characters unchanged
+            # Keep other characters unchanged
             decrypted_text += char
     return decrypted_text
+
 
 # Updated HTML template with decrypted messages
 HTML_TEMPLATE = '''
