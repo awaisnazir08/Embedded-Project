@@ -9,6 +9,10 @@ CORS(app)
 # Store messages in memory (could be replaced with a database)
 messages = []
 
+# Shared variable to hold the custom response option
+response_option = "Default response: Your message has been successfully processed."
+
+
 def caesar_decrypt(encrypted_text, shift=3):
     """
     Decrypt text using Caesar cipher with specified shift.
@@ -124,12 +128,45 @@ HTML_TEMPLATE = '''
 </html>
 '''
 
+
 @app.route('/')
 def home():
     return render_template_string(HTML_TEMPLATE, messages=messages)
 
+
+@app.route('/set_response', methods=['GET', 'POST'])
+def set_response():
+    global response_option
+    if request.method == 'POST':
+        # Update the response option dynamically
+        response_option = request.form.get('new_response', response_option)
+        return render_template_string('''
+            <p>Response option updated successfully!</p>
+            <a href="/set_response">Go back</a>
+        ''')
+    
+    # Render a form to update the response option
+    return render_template_string('''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Set Custom Response Option</title>
+        </head>
+        <body>
+            <h1>Set Custom Response Option</h1>
+            <form method="POST">
+                <label for="new_response">Enter new response option:</label>
+                <input type="text" id="new_response" name="new_response" placeholder="Type your custom response here">
+                <button type="submit">Update Response</button>
+            </form>
+        </body>
+        </html>
+    ''')
+
+
 @app.route('/send_data', methods=['POST'])
 def receive_data():
+    global response_option
     try:
         data = request.get_json()
         encrypted_message = data.get('encrypted_message')
@@ -151,13 +188,23 @@ def receive_data():
             return jsonify({
                 'status': 'success',
                 'message': 'Data received',
-                'decrypted_text': decrypted_message
+                'decrypted_text': decrypted_message,
+                'response_option': response_option  # Use the updated response option
             }), 200
         else:
-            return jsonify({'status': 'error', 'message': 'No message provided'}), 400
+            return jsonify({
+                'status': 'error',
+                'message': 'No message provided',
+                'response_option': response_option  # Use the updated response option
+            }), 400
             
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 400
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'response_option': response_option  # Use the updated response option
+        }), 400
+
 
 if __name__ == '__main__':
     # Use environment variables for production settings
